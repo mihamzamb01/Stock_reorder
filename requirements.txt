@@ -1,0 +1,11 @@
+langgraph>=1.2.16
+langchain-core>=1.6.12
+langchain-openai>=1.7.2
+sqlalchemy>=2.1.5
+pydantic>=2.14.0
+python-dotenv>=1.2.4
+rich>=13.0.0
+
+# Postgres / Supabase driver. Drop the [binary] extra if you prefer to build
+# psycopg from source.
+psycopg[binary]>=3.2

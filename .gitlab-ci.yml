@@ -1,0 +1,84 @@
+stages:
+  - test
+  - full-pipeline
+  - package
+
+.default_before_script: &default_before_script
+  - python -m pip install --upgrade pip
+  - pip install -r requirements-dev.txt
+
+# ---------------------------------------------------------------------------
+# Stage: test
+# ---------------------------------------------------------------------------
+
+.test_base: &test_base
+  stage: test
+  image: python:3.11-slim
+  before_script: *default_before_script
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+test_lint:
+  <<: *test_base
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.11", "3.12", "3.13"]
+  image: python:${PYTHON_VERSION}-slim
+  script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements-dev.txt
+    - ruff check .
+    - pytest
+    - pytest tests/test_db.py -q
+    - python scan_secrets.py .
+    - |
+      if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+        echo "ERROR: .env is tracked by git - it must not be" >&2
+        exit 1
+      fi
+    - pytest tests/test_full_pipeline.py -q
+
+# ---------------------------------------------------------------------------
+# Stage: full-pipeline
+# ---------------------------------------------------------------------------
+
+.full_pipeline_base: &full_pipeline_base
+  stage: full-pipeline
+  image: python:3.12-slim
+  before_script: *default_before_script
+  needs:
+    - test_lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+full_pipeline:
+  <<: *full_pipeline_base
+  script:
+    - python tests/ci_full_pipeline.py
+
+# ---------------------------------------------------------------------------
+# Stage: package
+# ---------------------------------------------------------------------------
+
+package:
+  stage: package
+  image: python:3.12-slim
+  before_script: *default_before_script
+  needs:
+    - test_lint
+    - full_pipeline
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  script:
+    - python deliver.py
+  artifacts:
+    name: "stock-reorder-agents-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - dist/stock-reorder-agents.zip
+    expire_in: 1 week

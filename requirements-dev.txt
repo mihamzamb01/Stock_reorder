@@ -1,0 +1,8 @@
+# Development and test tooling (not needed to run the pipeline).
+-r requirements.txt
+
+pytest>=9.1.1
+ruff>=0.15.0
+
+# Parses the .sql files to catch syntax errors without a live database server.
+sqlglot>=25.0.0
