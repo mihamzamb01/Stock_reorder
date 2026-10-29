@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from sqlalchemy import Engine
 
 from config.settings import ModelSpec, Settings
+from kill_switch import is_killed as _is_killed  # noqa: E402
 
 
 @dataclass
@@ -33,6 +34,10 @@ class AgentRuntime:
 
     def spec(self, role: str) -> ModelSpec:
         return self.routing[role]
+
+    def killed(self) -> bool:
+        """Return True if the kill switch is active."""
+        return _is_killed()
 
 
 def trace_message(summary: str) -> BaseMessage:

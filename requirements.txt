@@ -5,6 +5,7 @@ sqlalchemy>=2.1.5
 pydantic>=2.14.0
 python-dotenv>=1.2.4
 rich>=13.0.0
+pyyaml>=6.0
 
 # Postgres / Supabase driver. Drop the [binary] extra if you prefer to build
 # psycopg from source.

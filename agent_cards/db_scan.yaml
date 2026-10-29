@@ -1,0 +1,27 @@
+agent:
+  role: db_scan
+  name: DB Scan
+  version: "0.2.0"
+  status: active
+  provider: local
+  model: deterministic
+  description: "Deterministic database scan that identifies SKUs needing reordering."
+  capabilities:
+    - inventory_scan
+    - demand_history_analysis
+    - stockout_prediction
+  inputs:
+    - warehouse_code
+    - max_items
+    - focus_skus
+  outputs:
+    - candidates
+    - total_skus_scanned
+    - skus_needing_reorder
+  guardrails: []
+  alerts:
+    latency_ms: 30000
+    failure_rate_pct: 20
+  cost:
+    input_per_mtok: 0
+    output_per_mtok: 0

@@ -37,6 +37,7 @@ from config.settings import (  # noqa: E402
 from db.repository import get_engine  # noqa: E402
 from db.setup import check_database, seed_database  # noqa: E402
 from graph import build_graph  # noqa: E402
+from kill_switch import is_killed, reason  # noqa: E402
 from llm import build_llm  # noqa: E402
 from observability import RunRecorder, build_dashboard  # noqa: E402
 from reporting import (  # noqa: E402
@@ -141,6 +142,18 @@ def main(argv: list[str] | None = None) -> int:
     hint = interpreter_hint()
     if hint:
         console.print(f"[yellow]Note:[/yellow] {hint}\n")
+
+    # Kill switch check - halt immediately if active
+    if is_killed():
+        _r = reason()
+        _msg = "[bold red]PIPELINE KILLED[/bold red]"
+        if _r:
+            _msg += f" - {_r}"
+        console.print(Panel(Text(_msg), title="Kill Switch Active", border_style="red"))
+        console.print(
+            "[dim]Deactivate with: unset STOCK_REORDER_KILL_SWITCH  (or rm kill_switch.flag)[/dim]"
+        )
+        return 3
 
     stale = config_freshness()
     if stale:

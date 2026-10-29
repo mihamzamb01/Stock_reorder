@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  stock-reorder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stock-reorder-agents:${STOCK_REORDER_VERSION:-latest}
+    container_name: stock-reorder
+    environment:
+      - DATABASE_URL=sqlite:////data/stock_reorder.db
+      - RUNS_DIR=/runs
+      - LARP_ROUTER_API_KEY=${LARP_ROUTER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - MODEL_REORDER_PROVIDER=${MODEL_REORDER_PROVIDER:-larprouter}
+      - MODEL_SUPPLIER_PROVIDER=${MODEL_SUPPLIER_PROVIDER:-larprouter}
+      - MODEL_COST_PROVIDER=${MODEL_COST_PROVIDER:-larprouter}
+      - STOCK_REORDER_KILL_SWITCH=${STOCK_REORDER_KILL_SWITCH:-0}
+      - KILL_SWITCH_REASON=${KILL_SWITCH_REASON}
+    volumes:
+      - stock_reorder_data:/data
+      - stock_reorder_runs:/runs
+      - ./.env:/app/.env:ro
+    command: ["--warehouse", "WH-NORTH", "--max-items", "5"]
+    healthcheck:
+      test: ["CMD", "python", "main.py", "--routing"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  stock-reorder-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stock-reorder-dashboard:${STOCK_REORDER_VERSION:-latest}
+    container_name: stock-reorder-dashboard
+    environment:
+      - DATABASE_URL=sqlite:////data/stock_reorder.db
+      - RUNS_DIR=/runs
+    volumes:
+      - stock_reorder_data:/data
+      - stock_reorder_runs:/runs
+    command: ["--dashboard-sheet"]
+    depends_on:
+      stock-reorder:
+        condition: service_healthy
+
+volumes:
+  stock_reorder_data:
+  stock_reorder_runs:

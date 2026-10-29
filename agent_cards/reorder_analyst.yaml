@@ -1,0 +1,37 @@
+agent:
+  role: reorder_analyst
+  name: Reorder Analyst
+  version: "0.2.0"
+  status: active
+  provider: larprouter
+  model: deepseek-v4.1-flash
+  temperature: 0.1
+  max_tokens: 2048
+  description: "One agent per short SKU: determines urgency and order quantity."
+  capabilities:
+    - sku_urgency_assessment
+    - order_quantity_calculation
+    - parallel_execution
+  inputs:
+    - sku
+    - product_name
+    - min_required_qty
+    - days_of_cover
+    - rule_urgency
+  outputs:
+    - sku
+    - product_name
+    - urgency
+    - order_qty
+    - days_of_cover
+    - stockout_in_days
+    - rationale
+  guardrails:
+    - max_defect_rate_pct: 5.0
+    - min_on_time_pct: 75.0
+  alerts:
+    latency_ms: 30000
+    failure_rate_pct: 20
+  cost:
+    input_per_mtok: 0
+    output_per_mtok: 0

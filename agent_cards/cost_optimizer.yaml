@@ -1,0 +1,35 @@
+agent:
+  role: cost_optimizer
+  name: Cost Optimizer
+  version: "0.2.0"
+  status: active
+  provider: larprouter
+  model: glm-5.3-flash
+  temperature: 0.1
+  max_tokens: 8192
+  description: "Computes landed cost and volume splits to minimise spend within budget."
+  capabilities:
+    - landed_cost_calculation
+    - volume_split_optimization
+    - budget_gate_retry
+    - moq_enforcement
+  inputs:
+    - skus
+    - required_qty
+    - offers
+    - budget_cap
+  outputs:
+    - allocations
+    - total_spend
+    - cost_status
+    - warnings
+  guardrails:
+    - max_defect_rate_pct: 5.0
+    - min_on_time_pct: 75.0
+  alerts:
+    latency_ms: 30000
+    failure_rate_pct: 20
+    cost_limit_usd: 10
+  cost:
+    input_per_mtok: 0
+    output_per_mtok: 0

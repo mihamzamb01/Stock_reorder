@@ -1,0 +1,33 @@
+agent:
+  role: report
+  name: Report Generator
+  version: "0.2.0"
+  status: active
+  provider: local
+  model: deterministic
+  description: "Renders the final reorder plan, audit trail, and observability summary."
+  capabilities:
+    - plan_rendering
+    - audit_trail
+    - json_export
+    - dashboard_export
+  inputs:
+    - scan
+    - reorder_plan
+    - shortlist
+    - cost_plan
+    - cost_status
+  outputs:
+    - lines
+    - total_spend
+    - total_units
+    - suppliers
+    - warnings
+    - audit
+  guardrails: []
+  alerts:
+    latency_ms: 30000
+    failure_rate_pct: 20
+  cost:
+    input_per_mtok: 0
+    output_per_mtok: 0

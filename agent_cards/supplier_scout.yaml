@@ -1,0 +1,34 @@
+agent:
+  role: supplier_scout
+  name: Supplier Scout
+  version: "0.2.0"
+  status: active
+  provider: larprouter
+  model: glm-5.3-flash
+  temperature: 0.1
+  max_tokens: 8192
+  description: "Checks the DB for supplier offers and screens them against quality floors."
+  capabilities:
+    - supplier_offer_retrieval
+    - quality_floor_filtering
+    - price_ranking
+  inputs:
+    - sku
+    - required_qty
+    - offers
+  outputs:
+    - sku
+    - required_qty
+    - preferred_offer_id
+    - runner_up_offer_id
+    - exclude_offer_ids
+    - notes
+  guardrails:
+    - max_defect_rate_pct: 5.0
+    - min_on_time_pct: 75.0
+  alerts:
+    latency_ms: 30000
+    failure_rate_pct: 20
+  cost:
+    input_per_mtok: 0
+    output_per_mtok: 0
