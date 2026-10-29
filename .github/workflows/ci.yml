@@ -228,9 +228,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile.backend
           load: true
-          tags: stock-reorder-agents:local
+          tags: stock-reorder-backend:local
           build-args: |
             STOCK_REORDER_VERSION=${{ env.STOCK_REORDER_VERSION }}
 
@@ -241,14 +241,14 @@ jobs:
             -e OPENROUTER_API_KEY=stub \
             -e NVIDIA_API_KEY=stub \
             -e STOCK_REORDER_KILL_SWITCH=0 \
-            stock-reorder-agents:local --routing
+            stock-reorder-backend:local --routing
 
       - name: Test container kill switch
         run: |
           set +e
           docker run --rm --name stock-reorder-kill \
             -e STOCK_REORDER_KILL_SWITCH=1 \
-            stock-reorder-agents:local --routing > /dev/null 2>&1
+            stock-reorder-backend:local --routing > /dev/null 2>&1
           code=$?
           echo "Kill switch exit code: $code"
           test "$code" -eq 3

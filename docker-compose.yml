@@ -1,12 +1,15 @@
 version: "3.9"
 
 services:
-  stock-reorder:
+  # =============================================================================
+  # Backend - LangGraph Pipeline (Python)
+  # =============================================================================
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: stock-reorder-agents:${STOCK_REORDER_VERSION:-latest}
-    container_name: stock-reorder
+      dockerfile: Dockerfile.backend
+    image: stock-reorder-backend:${STOCK_REORDER_VERSION:-latest}
+    container_name: stock-reorder-backend
     environment:
       - DATABASE_URL=sqlite:////data/stock_reorder.db
       - RUNS_DIR=/runs
@@ -29,23 +32,56 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
+    networks:
+      - stock-reorder-network
 
-  stock-reorder-dashboard:
+  # =============================================================================
+  # Frontend - React Dashboard (Node.js + Nginx)
+  # =============================================================================
+  frontend:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: stock-reorder-dashboard:${STOCK_REORDER_VERSION:-latest}
-    container_name: stock-reorder-dashboard
+      dockerfile: Dockerfile.frontend
+    image: stock-reorder-frontend:${STOCK_REORDER_VERSION:-latest}
+    container_name: stock-reorder-frontend
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - stock-reorder-network
+
+  # =============================================================================
+  # Backend API Server (Optional - for dashboard API calls)
+  # =============================================================================
+  backend-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: stock-reorder-backend-api:${STOCK_REORDER_VERSION:-latest}
+    container_name: stock-reorder-backend-api
     environment:
       - DATABASE_URL=sqlite:////data/stock_reorder.db
       - RUNS_DIR=/runs
+      - STOCK_REORDER_KILL_SWITCH=${STOCK_REORDER_KILL_SWITCH:-0}
     volumes:
       - stock_reorder_data:/data
       - stock_reorder_runs:/runs
-    command: ["--dashboard-sheet"]
+    command: ["observability_server.py"]
+    ports:
+      - "8000:8000"
     depends_on:
-      stock-reorder:
+      backend:
         condition: service_healthy
+    networks:
+      - stock-reorder-network
+
+networks:
+  stock-reorder-network:
+    driver: bridge
 
 volumes:
   stock_reorder_data:
