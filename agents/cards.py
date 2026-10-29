@@ -7,7 +7,6 @@ and alert thresholds - used by CI validation, observability, and dashboards.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,7 +38,7 @@ class AgentCard:
     cost: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, role: str, data: dict[str, Any]) -> "AgentCard":
+    def from_dict(cls, role: str, data: dict[str, Any]) -> AgentCard:
         agent = data.get("agent", {})
         return cls(
             role=role,

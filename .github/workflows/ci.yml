@@ -6,11 +6,54 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type (major, minor, patch)'
+        required: false
+        default: 'patch'
+      tag_release:
+        description: 'Create git tag after successful release'
+        required: false
+        default: 'true'
 
 env:
   STOCK_REORDER_KILL_SWITCH: "0"
 
 jobs:
+  # -----------------------------------------------------------------------
+  # Stage 0: Version bump (manual dispatch only)
+  # -----------------------------------------------------------------------
+  bump-version:
+    name: bump version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bump version
+        id: bump
+        run: |
+          python scripts/bump_version.py ${{ github.event.inputs.bump }} --tag
+          echo "new_version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add VERSION pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+          git push origin main
+
+  # -----------------------------------------------------------------------
+  # Stage 1: test (lint + unit + integration + agent cards + version)
+  # -----------------------------------------------------------------------
   test:
     name: tests and lint
     runs-on: ubuntu-latest
@@ -91,13 +134,52 @@ jobs:
       - name: Check no secrets are committed
         run: |
           python scan_secrets.py .
-          # The scanner exits non-zero only for live secrets; .env must never
-          # be committed, so fail the build if it is tracked.
           if git ls-files --error-unmatch .env >/dev/null 2>&1; then
             echo "::error::.env is tracked by git - it must not be"
             exit 1
           fi
 
+  # -----------------------------------------------------------------------
+  # Stage 2: rollback on failure
+  # -----------------------------------------------------------------------
+  rollback-on-failure:
+    name: auto rollback on failure
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ failure() }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read current and previous versions
+        id: versions
+        run: |
+          current=$(cat VERSION)
+          previous=$(python rollback.py previous-tag)
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "previous=$previous" >> $GITHUB_OUTPUT
+
+      - name: Rollback version
+        if: ${{ steps.versions.outputs.previous != '' }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          python rollback.py version-rollback ${{ steps.versions.outputs.previous }}
+          git add VERSION pyproject.toml
+          git commit -m "chore: rollback version to ${{ steps.versions.outputs.previous }} after CI failure"
+          git push origin main
+
+      - name: Notify rollback
+        run: |
+          echo "::warning::CI failed for version ${{ steps.versions.outputs.current }}, rolled back to ${{ steps.versions.outputs.previous }}"
+
+  # -----------------------------------------------------------------------
+  # Stage 3: full-pipeline
+  # -----------------------------------------------------------------------
   full-pipeline:
     name: full pipeline (CLI end-to-end)
     runs-on: ubuntu-latest
@@ -142,8 +224,6 @@ jobs:
               seed_database(db)
               code = app.main(["--db", str(db), "--warehouse", "WH-NORTH", "--max-items", "5"])
               assert code == 0, f"WH-NORTH pipeline exited {code}"
-              print("WH-NORTH full pipeline OK")
-          EOF
 
       - name: Full pipeline - WH-WEST (stubbed models)
         env:
@@ -170,6 +250,7 @@ jobs:
               assert code == 0, f"WH-WEST pipeline exited {code}"
               print("WH-WEST full pipeline OK")
           EOF
+              print("WH-NORTH full pipeline OK")
 
       - name: Full pipeline - WH-CENTRAL (stubbed models)
         env:
@@ -195,6 +276,7 @@ jobs:
               code = app.main(["--db", str(db), "--warehouse", "WH-CENTRAL", "--max-items", "5"])
               assert code == 0, f"WH-CENTRAL pipeline exited {code}"
               print("WH-CENTRAL full pipeline OK")
+          EOF
           EOF
 
       - name: Budget over-cap retry (stubbed models)
@@ -224,7 +306,6 @@ jobs:
               ])
               assert code == 0, f"over-budget pipeline exited {code}"
               print("over-budget retry OK")
-          EOF
 
       - name: Dashboard sheet build (no keys needed)
         run: |
@@ -249,28 +330,8 @@ jobs:
               print("dashboard sheet build OK")
           EOF
 
-  package:
-    name: build the delivery package
-    runs-on: ubuntu-latest
-    needs: [test, full-pipeline]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-      - name: Build
-        run: python deliver.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: stock-reorder-agents
-          path: dist/stock-reorder-agents.zip
-
   # -----------------------------------------------------------------------
-  # Stage 3: docker (build + test container)
+  # Stage 4: docker (build + test container)
   # -----------------------------------------------------------------------
   docker:
     name: docker build and test
@@ -316,7 +377,7 @@ jobs:
           test "$code" -eq 3
 
   # -----------------------------------------------------------------------
-  # Stage 4: package (build delivery zip)
+  # Stage 5: package (build delivery zip)
   # -----------------------------------------------------------------------
   package:
     name: build the delivery package
@@ -340,21 +401,34 @@ jobs:
           path: dist/stock-reorder-agents.zip
 
   # -----------------------------------------------------------------------
-  # Stage 5: release (git tag on version bump)
+  # Stage 6: release (git tag on version bump)
   # -----------------------------------------------------------------------
   release:
-    name: create git tag on version bump
+    name: create git tag and release
     runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, 'bump')
+    needs: [test, full-pipeline, docker]
+    if: github.event_name == 'push' && (contains(github.event.head_commit.message, 'bump') || startsWith(github.ref, 'refs/tags/v'))
     steps:
       - uses: actions/checkout@v4
+
       - name: Read version
         run: |
           echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
       - name: Create git tag
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag -a "v${VERSION}" -m "Release ${VERSION}"
           git push origin "v${VERSION}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${VERSION}
+          name: Release v${VERSION}
+          body: |
+            Automated release v${VERSION}
+            - SemVer: ${{ env.VERSION }}
+            - CI: All tests passed
+          files: dist/stock-reorder-agents.zip
